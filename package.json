@@ -1,0 +1,26 @@
+{
+  "name": "bletcd",
+  "version": "1.0.0",
+  "description": "A minimalistic etcd client",
+  "main": "index.js",
+  "keywords": [
+    "etcd",
+    "rest",
+    "client"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/bloglovin/bletcd.git"
+  },
+  "author": "Hugo Wetterberg <hugo@wetterberg.nu>",
+  "license": "MIT",
+  "scripts": {
+    "test": "node_modules/.bin/istanbul cover node_modules/.bin/_mocha -- --ui tdd -R spec --inline-diffs"
+  },
+  "devDependencies": {
+    "istanbul": "^0.3.0",
+    "mocha": "^1.21.3",
+    "nock": "^0.42.2",
+    "tap": "^0.4.12"
+  }
+}
