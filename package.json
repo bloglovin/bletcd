@@ -1,6 +1,6 @@
 {
   "name": "bletcd",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A minimalistic etcd client",
   "main": "index.js",
   "keywords": [
@@ -20,7 +20,6 @@
   "devDependencies": {
     "istanbul": "^0.3.0",
     "mocha": "^1.21.3",
-    "nock": "^0.42.2",
-    "tap": "^0.4.12"
+    "nock": "^0.42.2"
   }
 }
