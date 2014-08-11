@@ -26,7 +26,7 @@ function Watcher(etcd, key, options) {
     watcher._req = etcd.get(key, requestOpts, result);
   }
 
-  function result(error, op) {
+  function result(error, op, headers) {
     watcher._req = null;
 
     if (error) {
@@ -34,6 +34,10 @@ function Watcher(etcd, key, options) {
 
       setTimeout(wait, watcher.backOff(retryAttempts));
       retryAttempts++;
+    } else if (op === undefined && headers['x-etcd-index']) {
+      // Empty timout response from etcd
+      requestOpts.waitIndex = parseInt(headers['x-etcd-index'], 10) + 1;
+      wait();
     } else {
       retryAttempts = 0;
       requestOpts.waitIndex = op.node.modifiedIndex + 1;

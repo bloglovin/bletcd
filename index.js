@@ -128,7 +128,7 @@ function etcdResponseHandler(callback) {
       var payload;
 
       try {
-        payload = JSON.parse(data);
+        payload = data.length ? JSON.parse(data) : undefined;
       } catch (error) {
         return callback(error, null, res.headers);
       }

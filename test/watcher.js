@@ -8,6 +8,7 @@ var lib = {
   Etcd: require('../')
 };
 
+var assert = lib.assert;
 var etcd = lib.nock('http://127.0.0.1:4001');
 
 etcd.get('/v2/keys/bletcd-test/watched?wait=true').delay(10)
@@ -77,6 +78,18 @@ suite('Watching', function testClient() {
 
 etcd.get('/v2/keys/bletcd-test/watched?wait=true').times(2).reply(500, 'Fuu');
 
+etcd.get('/v2/keys/bletcd-test/watched?wait=true').reply(200, '', {
+  'x-etcd-index': '79264'
+});
+etcd.get('/v2/keys/bletcd-test/watched?wait=true&waitIndex=79265')
+  .reply(200, {"action":"set","node":{"key":"/bletcd-test/watched","value":"foovalue","modifiedIndex":79265,"createdIndex":79265}}, { 'content-type': 'application/json',
+  'x-etcd-index': '79265',
+  'x-raft-index': '927182',
+  'x-raft-term': '14',
+  date: 'Tue, 29 Jul 2014 08:35:22 GMT',
+  'transfer-encoding': 'chunked' });
+
+
 suite('Watch retry', function testClient() {
   var etcd = new lib.Etcd();
 
@@ -99,6 +112,15 @@ suite('Watch retry', function testClient() {
       }
       failCount++;
       failT = Date.now();
+    });
+  });
+
+  test('Timeout response', function testTimeout(done) {
+    var watcher = etcd.watcher('bletcd-test/watched');
+
+    watcher.on('change', function changeAfterRetry(op) {
+      assert.equal(op.node.value, 'foovalue');
+      done();
     });
   });
 });
