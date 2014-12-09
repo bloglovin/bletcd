@@ -15,10 +15,15 @@
   "author": "Hugo Wetterberg <hugo@wetterberg.nu>",
   "license": "MIT",
   "scripts": {
-    "test": "node_modules/.bin/istanbul cover node_modules/.bin/_mocha -- --ui tdd -R spec --inline-diffs"
+    "test": "node -e \"require('grunt').tasks(['test']);\"",
+    "test-all": "node -e \"require('grunt').tasks(['test-all']);\"",
+    "prepush": "npm test"
   },
   "devDependencies": {
+    "grunt": "^0.4.5",
+    "husky": "^0.6.2",
     "istanbul": "^0.3.0",
+    "lintlovin": "^1.8.0",
     "mocha": "^1.21.3",
     "nock": "^0.42.2"
   }

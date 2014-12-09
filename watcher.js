@@ -1,38 +1,36 @@
 /* jshint node: true */
 'use strict';
 
-var lib = {
-  util: require('util'),
-  events: require('events')
-};
+var events = require('events');
 
-module.exports = Watcher;
+module.exports = createWatcher;
 
-function Watcher(etcd, key, options) {
-  var watcher = this;
+function createWatcher(etcd, key, options) {
   var retryAttempts = 0;
   var requestOpts = {};
-
-  watcher._stopped = false;
+  var req;
+  var stopped = false;
+  var emitter = new events.EventEmitter();
 
   Object.getOwnPropertyNames(options).forEach(function setOption(name) {
     requestOpts[name] = options[name];
   });
 
   function wait() {
-    if (watcher._stopped) return;
+    if (stopped) { return; }
 
     requestOpts.wait = true;
-    watcher._req = etcd.get(key, requestOpts, result);
+    req = etcd.get(key, requestOpts, result);
   }
 
   function result(error, op, headers) {
-    watcher._req = null;
+    if (stopped) { return; }
+    req = undefined;
 
     if (error) {
-      watcher.emit('error', error);
+      emitter.emit('error', error);
 
-      setTimeout(wait, watcher.backOff(retryAttempts));
+      setTimeout(wait, backOff(retryAttempts));
       retryAttempts++;
     } else if (op === undefined && headers['x-etcd-index']) {
       // Empty timout response from etcd
@@ -42,23 +40,29 @@ function Watcher(etcd, key, options) {
       retryAttempts = 0;
       requestOpts.waitIndex = op.node.modifiedIndex + 1;
 
-      watcher.emit('change', op);
+      emitter.emit('change', op);
       wait();
     }
   }
 
-  wait();
-}
-lib.util.inherits(Watcher, lib.events.EventEmitter);
-
-Watcher.prototype.backOff = function (retryAttempts) {
-  return Math.pow(2, retryAttempts)*300 + Math.round(Math.random() * 1000);
-};
-
-Watcher.prototype.stop = function () {
-  this._stopped = true;
-  if (this._req) {
-    this._req.abort();
-    this._req = null;
+  function backOff(retryAttempts) {
+    return Math.pow(2, retryAttempts)*300 + Math.round(Math.random() * 1000);
   }
-};
+
+  function stop() {
+    stopped = true;
+    if (req) {
+      req.abort();
+      req = undefined;
+    }
+  }
+
+  wait();
+
+  return Object.freeze({
+    on: function(event, handler) {
+      emitter.on(event, handler);
+    },
+    stop: stop,
+  });
+}

@@ -1,115 +1,184 @@
 /* jshint node: true */
 'use strict';
 
-var lib = {
-  url: require('url'),
-  querystring: require('querystring'),
-  http: require('http'),
-  https: require('https'),
-  Watcher: require('./watcher')
-};
+var url = require('url');
+var querystring = require('querystring');
+var http = require('http');
+var https = require('https');
+var createWatcher = require('./watcher');
 
-module.exports = Etcd;
+module.exports = createClient;
 
-function Etcd(hostname, port, sslOpts) {
-  this.api = '/v2/keys/';
-  this.hostname = hostname || '127.0.0.1';
-  this.port = port || 4001;
+function createClient(clientOptions) {
+  clientOptions = shallowClone(clientOptions) || {};
+  var host = url.parse(clientOptions.url || 'http://127.0.0.1:4001');
+  var apiRoot = '/v2/keys/';
 
-  this.https = !!sslOpts;
-  this.httpLib = this.https ? lib.https : lib.http;
-  this.sslOpts = sslOpts;
-  if (this.sslOpts) {
-    this.agent = new this.httpLib.Agent(sslOpts);
-  }
-}
-
-Etcd.prototype.get = function (key, options, callback) {
-  if (typeof options === 'function') {
-    callback = options;
-    options = null;
-  }
-  return this._request('GET', key, options, false, callback);
-};
-
-Etcd.prototype.set = function (key, value, options, callback) {
-  if (typeof options === 'function') {
-    callback = options;
-    options = null;
-  }
-  options = options || {};
-  options.value = value;
-
-  return this._request('PUT', key, options, true, callback);
-};
-
-Etcd.prototype.create = function (key, value, options, callback) {
-  if (typeof options === 'function') {
-    callback = options;
-    options = null;
-  }
-  options = options || {};
-  options.value = value;
-
-  return this._request('POST', key, options, true, callback);
-};
-
-Etcd.prototype.del = function (key, options, callback) {
-  if (typeof options === 'function') {
-    callback = options;
-    options = null;
-  }
-  return this._request('DELETE', key, options, false, callback);
-};
-
-Etcd.prototype._request = function (method, key, parameters, body, callback) {
-  var headers = {};
-  var path = this.api + trimKey(key);
-
-  if (parameters) {
-    parameters = lib.querystring.stringify(parameters);
-    if (body) {
-      headers['Content-type'] = 'application/x-www-form-urlencoded';
-      headers['Content-length'] = Buffer.byteLength(parameters);
-    }
-    else {
-      path += '?' + parameters;
-    }
+  var agent;
+  var ssl = host.protocol === 'https:';
+  var httpLib = ssl ? https : http;
+  if (ssl || clientOptions.agentConfig) {
+    agent = new httpLib.Agent(clientOptions.agentConfig);
   }
 
-  var req = this.httpLib.request({
-    hostname: this.hostname,
-    port: this.port,
-    method: method,
-    headers: headers,
-    path: path,
-    agent: this.agent
+  var api = Object.freeze({
+    get: get,
+    put: put,
+    set: put,
+    post: post,
+    create: post,
+    delete: del,
+    del: del,
+    watcher: watcher,
   });
 
-  if (body) {
-    req.write(parameters);
+  function get(key, options, callback) {
+    if (typeof options === 'function') {
+      callback = options;
+      options = {};
+    }
+
+    var parameters = shallowClone(options.parameters) || {};
+    // Pick up on some options as parameters
+    if (options.recursive !== undefined) {
+      parameters.recursive = options.recursive;
+    }
+    if (options.wait !== undefined) {
+      parameters.wait = options.wait;
+    }
+    if (options.waitIndex !== undefined) {
+      parameters.waitIndex = options.waitIndex;
+    }
+
+    return request('GET', key, {
+      parameters: parameters,
+      options: options,
+    }, callback);
   }
 
-  req.on('response', etcdResponseHandler(callback));
-  req.on('error', callback);
-
-  req.end();
-  return req;
-};
-
-Etcd.prototype.watcher = function (key, index, options) {
-  if (typeof index === 'object') {
-    options = index;
-    index = null;
+  function put(key, value, options, callback) {
+    return write('PUT', key, value, options, callback);
   }
 
-  options = options || {};
-  if (typeof index === 'number') {
-    options.waitIndex = index;
+  function post(key, value, options, callback) {
+    return write('POST', key, value, options, callback);
   }
 
-  return new lib.Watcher(this, key, options);
-};
+  function del(key, options, callback) {
+    if (typeof options === 'function') {
+      callback = options;
+      options = {};
+    }
+
+    var parameters = options.parameters || {};
+    definedSet(parameters, 'recursive', options.recursive);
+
+    return request('DELETE', key, {
+      parameters: parameters,
+      options: options,
+    }, callback);
+  }
+
+  function write(method, key, value, options, callback) {
+    if (typeof options === 'function') {
+      callback = options;
+      options = {};
+    }
+    var body = shallowClone(options.attributes) || {};
+    body.value = value;
+
+    if (options.ttl !== undefined) {
+      body.ttl = options.ttl;
+    }
+
+    return request(method, key, {
+      parameters: shallowClone(options.parameters),
+      body: body,
+      options: options,
+    }, callback);
+  }
+
+  function request(method, key, config, callback) {
+    var headers = {};
+    var options = config.options || {};
+    var path = apiRoot + trimKey(key);
+
+    if (config.parameters) {
+      var parameters = querystring.stringify(config.parameters);
+      if (parameters.length) {
+        path += '?' + parameters;
+      }
+    }
+
+    var payload;
+    if (config.body !== undefined) {
+      payload = querystring.stringify(config.body);
+      headers['Content-type'] = 'application/x-www-form-urlencoded';
+      headers['Content-length'] = Buffer.byteLength(payload);
+    }
+
+    var req = httpLib.request({
+      hostname: host.hostname,
+      port: host.port || 4001,
+      method: method,
+      headers: headers,
+      path: path,
+      agent: agent,
+    });
+
+    var timeout = clientOptions.timeout;
+    if (options.timeout !== undefined) {
+      timeout = options.timeout;
+    }
+    if (timeout !== undefined) {
+      req.setTimeout(timeout);
+    }
+
+    if (payload) {
+      req.write(payload);
+    }
+
+    req.on('response', etcdResponseHandler(callback));
+    req.on('error', callback);
+
+    req.end();
+    return req;
+  }
+
+  function watcher(key, index, options) {
+    if (typeof index === 'object') {
+      options = index;
+      index = null;
+    }
+
+    options = options || {};
+    if (typeof index === 'number') {
+      options.waitIndex = index;
+    }
+
+    return createWatcher(api, key, options);
+  }
+
+  return api;
+}
+
+function shallowClone(obj) {
+  if (!obj || typeof obj !== 'object') {
+    return;
+  }
+
+  var clone = {};
+  Object.getOwnPropertyNames(obj).forEach(function(name) {
+    clone[name] = obj[name];
+  });
+  return clone;
+}
+
+function definedSet(target, name, value) {
+  if (value !== undefined) {
+    target[name] = value;
+  }
+}
 
 function trimKey(key) {
   return key.replace(/(^\/)|(\/$)/g, '');
