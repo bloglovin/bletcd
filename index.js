@@ -111,12 +111,7 @@ function createClient(clientOptions) {
     var options = config.options || {};
     var path = apiRoot + trimKey(key);
 
-    var writeOp = false;
-    switch (method) {
-      case 'POST': case 'PUT': case 'DELETE':
-        writeOp = true;
-    }
-    var selectedHost = writeOp ? leaderHost : host;
+    var selectedHost = isWriteOp(method) ? leaderHost : host;
 
     if (config.parameters !== undefined) {
       var parameters = querystring.stringify(config.parameters);
@@ -219,6 +214,10 @@ function definedSet(target, name, value) {
 
 function trimKey(key) {
   return key.replace(/(^\/)|(\/$)/g, '');
+}
+
+function isWriteOp(method) {
+  return ['POST', 'PUT', 'DELETE'].indexOf(method) !== -1;
 }
 
 function etcdResponseHandler(callback) {
