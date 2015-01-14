@@ -27,5 +27,8 @@
     "lintlovin": "^1.8.0",
     "mocha": "^1.21.3",
     "nock": "^0.42.2"
+  },
+  "dependencies": {
+    "verror": "^1.6.0"
   }
 }

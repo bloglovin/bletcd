@@ -5,13 +5,16 @@ var url = require('url');
 var querystring = require('querystring');
 var http = require('http');
 var https = require('https');
-var createWatcher = require('./watcher');
+
+var createWatcher = require('./lib/watcher');
+var BLEtcdError = require('./lib/error');
 
 module.exports = createClient;
 
 function createClient(clientOptions) {
   clientOptions = shallowClone(clientOptions) || {};
   var host = url.parse(clientOptions.url || 'http://127.0.0.1:4001');
+  var leaderHost = url.parse(clientOptions.url || 'http://127.0.0.1:4001');
   var apiRoot = '/v2/keys/';
 
   var agent;
@@ -103,7 +106,14 @@ function createClient(clientOptions) {
     var options = config.options || {};
     var path = apiRoot + trimKey(key);
 
-    if (config.parameters) {
+    var writeOp = false;
+    switch (method) {
+      case 'POST': case 'PUT': case 'DELETE':
+        writeOp = true;
+    }
+    var selectedHost = writeOp ? leaderHost : host;
+
+    if (config.parameters !== undefined) {
       var parameters = querystring.stringify(config.parameters);
       if (parameters.length) {
         path += '?' + parameters;
@@ -117,32 +127,54 @@ function createClient(clientOptions) {
       headers['Content-length'] = Buffer.byteLength(payload);
     }
 
-    var req = httpLib.request({
-      hostname: host.hostname,
-      port: host.port || 4001,
-      method: method,
-      headers: headers,
-      path: path,
-      agent: agent,
+    function performRequest() {
+      var req = httpLib.request({
+        hostname: selectedHost.hostname,
+        port: selectedHost.port || 4001,
+        method: method,
+        headers: headers,
+        path: path,
+        agent: agent,
+      });
+
+      var timeout = clientOptions.timeout;
+      if (options.timeout !== undefined) {
+        timeout = options.timeout;
+      }
+      if (timeout !== undefined) {
+        req.setTimeout(timeout);
+      }
+
+      if (payload) {
+        req.write(payload);
+      }
+
+      req.on('response', etcdResponseHandler(function(err, result, headers) {
+        if (err && err.reason === BLEtcdError.reason.LeaderRedirect) {
+          leaderHost = url.parse(headers.location);
+          selectedHost = leaderHost;
+          currentRequest = performRequest();
+          return;
+        }
+        callback(err, result, headers);
+      }));
+      req.on('error', function (err) {
+        currentRequest = undefined;
+        var error = new BLEtcdError('Request failed', BLEtcdError.reason.RequestFailed, err);
+        callback(error);
+      });
+      req.end();
+    }
+
+    var currentRequest = performRequest();
+
+    return Object.freeze({
+      abort: function() {
+        if (currentRequest) {
+          currentRequest.abort();
+        }
+      },
     });
-
-    var timeout = clientOptions.timeout;
-    if (options.timeout !== undefined) {
-      timeout = options.timeout;
-    }
-    if (timeout !== undefined) {
-      req.setTimeout(timeout);
-    }
-
-    if (payload) {
-      req.write(payload);
-    }
-
-    req.on('response', etcdResponseHandler(callback));
-    req.on('error', callback);
-
-    req.end();
-    return req;
   }
 
   function watcher(key, index, options) {
@@ -195,15 +227,21 @@ function etcdResponseHandler(callback) {
 
     res.on('end', function gotFullResponse() {
       var payload;
+      var error;
 
       try {
         payload = data.length ? JSON.parse(data) : undefined;
-      } catch (error) {
+      } catch (err) {
+        error = new BLEtcdError('Failed to parse JSON', BLEtcdError.reason.BadResponse, err);
         return callback(error, null, res.headers);
       }
 
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        var error = new Error(payload.message);
+      if (res.statusCode === 307) {
+        error = new BLEtcdError('Redirected to leader', BLEtcdError.reason.LeaderRedirect);
+        callback(error, payload, res.headers);
+      }
+      else if (res.statusCode < 200 || res.statusCode >= 300) {
+        error = new BLEtcdError(payload.message, BLEtcdError.reason.ErrorResponse);
         callback(error, payload, res.headers);
       }
       else {
