@@ -13,8 +13,13 @@ module.exports = createClient;
 
 function createClient(clientOptions) {
   clientOptions = shallowClone(clientOptions) || {};
-  var host = url.parse(clientOptions.url || 'http://127.0.0.1:4001');
-  var leaderHost = url.parse(clientOptions.url || 'http://127.0.0.1:4001');
+
+  var hostUrl = clientOptions.url || 'http://127.0.0.1:4001';
+  var host = url.parse(hostUrl);
+
+  var leaderUrl = clientOptions.leaderUrl || hostUrl;
+  var leaderHost = url.parse(leaderUrl);
+
   var apiRoot = '/v2/keys/';
 
   var agent;
