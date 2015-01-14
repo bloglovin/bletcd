@@ -1,3 +1,16 @@
+## 2.2.0 (2015-01-14)
+
+
+#### Bug Fixes
+
+* **main:** guard against unexpected error payload ([304e8b73](https://github.com/bloglovin/bletcd/commit/304e8b732f9bc254ffaccd7e80d85c182db50c62))
+
+
+#### Features
+
+* **main:** allow separate option for leaderUrl ([541ff6f8](https://github.com/bloglovin/bletcd/commit/541ff6f8577fcd8331e11b47e9e1df299ce2f195))
+
+
 ## 2.1.0 (2015-01-14)
 
 
