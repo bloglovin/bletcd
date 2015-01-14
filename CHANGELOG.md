@@ -1,3 +1,11 @@
+## 2.1.0 (2015-01-14)
+
+
+#### Features
+
+* **main:** follow redirects to leader ([79d23ff2](https://github.com/bloglovin/bletcd/commit/79d23ff25ae217227a391449e7ad61cbbcb7944d))
+
+
 ## 2.0.0 (2014-12-09)
 
 
