@@ -150,7 +150,7 @@ function createClient(clientOptions) {
       }
 
       req.on('response', etcdResponseHandler(function(err, result, headers) {
-        if (err && err.reason === BLEtcdError.reason.LeaderRedirect) {
+        if (err && err.reason === BLEtcdError.reason.leaderRedirect) {
           leaderHost = url.parse(headers.location);
           selectedHost = leaderHost;
           currentRequest = performRequest();
@@ -160,7 +160,7 @@ function createClient(clientOptions) {
       }));
       req.on('error', function (err) {
         currentRequest = undefined;
-        var error = new BLEtcdError('Request failed', BLEtcdError.reason.RequestFailed, err);
+        var error = new BLEtcdError('Request failed', BLEtcdError.reason.requestFailed, err);
         callback(error);
       });
       req.end();
@@ -232,16 +232,16 @@ function etcdResponseHandler(callback) {
       try {
         payload = data.length ? JSON.parse(data) : undefined;
       } catch (err) {
-        error = new BLEtcdError('Failed to parse JSON', BLEtcdError.reason.BadResponse, err);
+        error = new BLEtcdError('Failed to parse JSON', BLEtcdError.reason.badResponse, err);
         return callback(error, null, res.headers);
       }
 
       if (res.statusCode === 307) {
-        error = new BLEtcdError('Redirected to leader', BLEtcdError.reason.LeaderRedirect);
+        error = new BLEtcdError('Redirected to leader', BLEtcdError.reason.leaderRedirect);
         callback(error, payload, res.headers);
       }
       else if (res.statusCode < 200 || res.statusCode >= 300) {
-        error = new BLEtcdError(payload.message, BLEtcdError.reason.ErrorResponse);
+        error = new BLEtcdError(payload.message, BLEtcdError.reason.errorResponse);
         callback(error, payload, res.headers);
       }
       else {
