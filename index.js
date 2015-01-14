@@ -241,7 +241,8 @@ function etcdResponseHandler(callback) {
         callback(error, payload, res.headers);
       }
       else if (res.statusCode < 200 || res.statusCode >= 300) {
-        error = new BLEtcdError(payload.message, BLEtcdError.reason.errorResponse);
+        var message = payload && payload.message ? payload.message : 'Unknown error';
+        error = new BLEtcdError(message, BLEtcdError.reason.errorResponse);
         callback(error, payload, res.headers);
       }
       else {
